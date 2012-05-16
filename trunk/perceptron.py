@@ -16,7 +16,6 @@ possible_tags = []
 strings = []
 regExp = defaultdict(str)
 codes = defaultdict(str)
-repeat = defaultdict(list) #repeat[vals] = (# of times correctly tagged in a row, # of skip times remaining)
 cca1 = defaultdict(tuple)
 cca2 = defaultdict(tuple)
 
@@ -198,7 +197,7 @@ def get_indices(sent, tag, POS,  examp_num):
             for temp in range(10):
                 size = size/10
                 cca_val = int(float(cca1[sentence[i+2]][k])/size)
-                phrase = 'cca:current,pos={0},size = {1},bucket={2},t={3}'.format(k,size,cca_val,tags[i+2])
+                phrase = 'cca:current,pos={0},size={1},bucket={2},t={3}'.format(k,size,cca_val,tags[i+2])
                 index = phi.get(phrase, -1)
                 if index == -1:
                     index = add_feature(phrase, examp_num)
@@ -310,21 +309,20 @@ def perceptron():
             correct_tags = vals[1]
             POS = vals[2]
             tags = viterbi(sentence, POS, phi, possible_tags, alpha, strings, Words, regExp, codes, cca1, cca_length)
-            indices = get_indices(sentence, tags, POS, examp_num)
             if not tags == correct_tags:
                 j += 1
-                repeat[count] = [0,0]
                 dont_repeat = False
+                indices = get_indices(sentence, tags, POS, examp_num)
                 correct_indices = get_indices(sentence, correct_tags, POS, examp_num)
                 for i in indices:
                     alpha[i] += -1*add_factor
                 for i in correct_indices:
                     alpha[i] += add_factor
-            for i in set(indices) | set(correct_indices):
-                val1 = alpha_average[i][0]+(examp_num - alpha_average[i][1])*alpha_average[i][2]
-                val2 = examp_num
-                val3 = alpha[i]
-                alpha_average[i] = (val1,val2,val3)
+                for i in set(indices) | set(correct_indices):
+                    val1 = alpha_average[i][0]+(examp_num - alpha_average[i][1])*alpha_average[i][2]
+                    val2 = examp_num
+                    val3 = alpha[i]
+                    alpha_average[i] = (val1,val2,val3)
             vals = get_sentence_and_tags(data)
         data.close()
         if dont_repeat:
