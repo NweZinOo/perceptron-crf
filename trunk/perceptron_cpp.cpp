@@ -52,15 +52,20 @@ map<string, list<double> > cca2;
 
 int NUM_ITERATIONS = 50;
 int number_of_sentences = 0;
-int cca_length = 50;
+int cca_length = 5;
 
+bool use_heuristic = false; //If a word is seen more than 5 times in training data limit the possible tags to only those seen with the word
 bool use_brown = false;
-bool use_cca = false;
+bool use_cca = true;
 
 string training_data_file = "inputs/eng.train";
 string brown_codes_file = "inputs/paths";
-string cca_file = "inputs/OUT_BIGRAM_proper";
-string out_directory = "output/";
+string cca_file = "inputs/jenny_good.txt";
+string out_directory = "no_heuristic/";
+string test_directory = "inputs/";
+
+const int  num_test_files = 2;
+const string test_files[num_test_files] = {"eng.testa", "eng.testb"};
 
 void init_Words();
 
@@ -89,6 +94,8 @@ void viterbi(list<string>* sentence, list<string>* chnks, list<string>* POS, lis
 void new_feature(string feature, int examp_num);
 
 void perceptron();
+
+void perceptron_test(string test_file, int t);
 
 int main(){
   perceptron();
@@ -326,8 +333,8 @@ void get_features_cca(list<string>* features, map<string, string>* local_data) {
   list<double>::iterator vect_it = cca1[word].begin();
 
   for (int i = 0; i < cca_length; i++) {
-    double size = .01;
-    for (int j = 0; j < 5; j++) {
+    double size = .0001;
+    for (int j = 0; j < 3; j++) {
       stringstream ss;
       size = size/10.0;
       int bucket = static_cast<int>((*vect_it)/size);
@@ -515,26 +522,26 @@ void viterbi(list<string>* sentence, list<string>* chnks, list<string>* POS, lis
     chnks_it++;
     pos_it++;
   }
-  for (int k = 1; k < len+1; k++) {
+  for (int k = 2; k < len+2; k++) {
     list<string> t1 = possible_tags;
     list<string> t2 = possible_tags;
     list<string> t3 = possible_tags;
 
-    if (k == 1) {
+    if (k == 2) {
       t1.clear();
       t2.clear();
       
       t1.push_front("*");
       t2.push_front("*");
     }
-    else if (k == 2) {
+    else if (k == 3) {
       t1.clear();
       t1.push_front("*");
     }
 
-    if ((Words.find(sent_temp[k+1]) != Words.end()) && Words[sent_temp[k+1]].count > 5) {
+    if (use_heuristic && (Words.find(sent_temp[k]) != Words.end()) && Words[sent_temp[k]].count > 5) {
       t3.clear();
-      t3 = Words[sent_temp[k+1]].tags;
+      t3 = Words[sent_temp[k]].tags;
     }
 
     list<string>::iterator t1_it;
@@ -553,7 +560,7 @@ void viterbi(list<string>* sentence, list<string>* chnks, list<string>* POS, lis
 	  list<string>::iterator feat_it;
 	  double val = 0.0;
 
-	  pi_prev_ss << pi_prev_s << k-1 << ";" << *t1_it << ";" << *t2_it;
+	  pi_prev_ss << pi_prev_s << k-2 << ";" << *t1_it << ";" << *t2_it;
 
 	  if (pi.find(pi_prev_ss.str()) == pi.end()) {
 	    break;
@@ -565,16 +572,16 @@ void viterbi(list<string>* sentence, list<string>* chnks, list<string>* POS, lis
 	  local_data.clear();
 	  features.clear();
 	  
-	  local_data["w_m2"] = sent_temp[k-1];
-	  local_data["w_m1"] = sent_temp[k];
-	  local_data["w_i"] = sent_temp[k+1];
-	  local_data["w_1"] = sent_temp[k+2];
-	  local_data["w_2"] = sent_temp[k+3];
+	  local_data["w_m2"] = sent_temp[k-2];
+	  local_data["w_m1"] = sent_temp[k-1];
+	  local_data["w_i"] = sent_temp[k];
+	  local_data["w_1"] = sent_temp[k+1];
+	  local_data["w_2"] = sent_temp[k+2];
 	  local_data["t_2"] = *t1_it;
 	  local_data["t_1"] = *t2_it;
 	  local_data["t"] = *t3_it;
-	  local_data["pos"] = pos_temp[k+1];
-	  local_data["chnk"] = chnks_temp[k+1];
+	  local_data["pos"] = pos_temp[k];
+	  local_data["chnk"] = chnks_temp[k];
 
 	  get_features(&features, &local_data);
 
@@ -583,7 +590,7 @@ void viterbi(list<string>* sentence, list<string>* chnks, list<string>* POS, lis
 	      val += alpha[*feat_it];
 	    }
 	  }
-	  pi_cur_ss << pi_cur_s << k << ";" << *t2_it << ";" << *t3_it;
+	  pi_cur_ss << pi_cur_s << k-1 << ";" << *t2_it << ";" << *t3_it;
 
 	  if ((pi.find(pi_cur_ss.str()) == pi.end()) || val > pi[pi_cur_ss.str()]) {
 	    pi[pi_cur_ss.str()] = val;
@@ -704,7 +711,7 @@ void perceptron() {
     double time_val = 0;
     bool first = true;
 
-    cout << "---" << t << "---\n";
+    cout << "---" << t << "---\n" << flush;
 
     data.open(training_data_file.c_str());
 
@@ -801,12 +808,12 @@ void perceptron() {
     }
     data.close();
     if (dont_repeat) {
-      cout << "SUCCESS!!!\n";
+      cout << "SUCCESS!!!\n" << flush;
       return;
     }
     double temp = static_cast<double>(time(NULL)-start_time);
-    cout << static_cast<int>(temp/3600) << " h " << (static_cast<int>(temp)%3600)/60 << " m " << static_cast<int>(temp)%60 << " s\n";
-    cout << "Number Incorrect: " << j << endl;
+    cout << "Total Time for Iteration: " << static_cast<int>(temp/3600) << " h " << (static_cast<int>(temp)%3600)/60 << " m " << static_cast<int>(temp)%60 << " s\n";
+    cout << "Number Incorrect: " << j << endl << flush;
 
     map<string, int>::iterator alpha_it;
     
@@ -819,8 +826,104 @@ void perceptron() {
       alpha_avg[alpha_it->first].ex_num_last_update = val2;
       alpha_avg[alpha_it->first].val_last_update = val3;
     }
-
+    if (t%10 == 0) {
+      for (int i = 0; i < num_test_files; i++) {
+	perceptron_test(test_files[i], t);
+      }
+    }
   }
+}
+
+void perceptron_test(string test_file, int t) {
+  bool retrieved_data;
+  fstream test_data;
+  ofstream out;
+  list<string> sentence, tags, chnks, POS;
+  
+  double count = 0.0;
+  time_t time1 = 0.0;
+  time_t time2 = 0.0;
+  double avg_time = 0.0;
+  time_t start_time = time(NULL);
+  double time_val = 0;
+  bool first = true;
+
+  stringstream ss;
+  string s = test_directory + test_file;
+  test_data.open(s.c_str());
+  ss << out_directory << "result_" << t << "_" << test_file;
+  out.open((ss.str()).c_str());
+
+  sentence.clear();
+  tags.clear();
+  chnks.clear();
+  POS.clear();
+    
+  retrieved_data = get_sentence_and_tags(&test_data, &sentence, &tags, &chnks, &POS);
+
+  while (retrieved_data) {
+    //--------------------------------
+    //------------TIME-STATS----------
+    //--------------------------------      
+    ofstream progress;
+    string file;
+    
+    count += 1;
+    time2 = time(NULL);
+    if (not first) {
+      avg_time = static_cast<double>((time2-start_time))/static_cast<double>(count);
+      time_val = avg_time * (number_of_sentences - count);
+    }
+    first = false;
+    
+    file = out_directory + string("progress.txt");
+    
+    progress.open(file.c_str());
+    
+    progress << "Percent complete:\n";
+    progress << "----------------\n\n";
+    progress << count << "/" << number_of_sentences << " = " << static_cast<double>(count*100)/static_cast<double>(number_of_sentences) << "%\n\n\n";
+    progress << "Time remaining:\n";
+    progress << "--------------\n\n";
+    progress << static_cast<int>(time_val/3600) << " h " << (static_cast<int>(time_val)%3600)/60 << " m " << static_cast<int>(time_val)%60 << " s\n";
+    
+    time1 = time2;
+    progress.close();
+    //--------------------------------
+    //--------------------------------
+    
+    list<string> guess;
+
+    viterbi(&sentence, &chnks, &POS, &guess);
+    
+    list<string>::iterator sent_it;
+    list<string>::iterator pos_it;
+    list<string>::iterator tags_it;
+    list<string>::iterator guess_it;
+    
+    pos_it = POS.begin();
+    tags_it = tags.begin();
+    guess_it = guess.begin();
+
+    for (sent_it = sentence.begin(); sent_it != sentence.end(); sent_it++) {
+      out << *sent_it << " " << *pos_it << " " << *tags_it << " " << *guess_it << "\n";
+      pos_it++;
+      tags_it++;
+      guess_it++;
+    }
+    
+    out << "\n";
+    
+    sentence.clear();
+    tags.clear();
+    chnks.clear();
+    POS.clear();
+    
+    retrieved_data = get_sentence_and_tags(&test_data, &sentence, &tags, &chnks, &POS);      
+  }      
+  test_data.close();
+  double temp = static_cast<double>(time(NULL)-start_time);
+  cout <<  "Total Time for testing " << test_file << ": " << static_cast<int>(temp/3600) << " h " << (static_cast<int>(temp)%3600)/60 << " m " << static_cast<int>(temp)%60 << " s\n" << flush;
 }
 
 
