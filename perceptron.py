@@ -16,6 +16,7 @@ possible_tags = []
 strings = []
 regExp = defaultdict(str)
 codes = defaultdict(str)
+repeat = defaultdict(list) #repeat[vals] = (# of times correctly tagged in a row, # of skip times remaining)
 cca1 = defaultdict(tuple)
 cca2 = defaultdict(tuple)
 
@@ -47,7 +48,6 @@ def get_tags():
     possible_tags = list(tags)
     data.close()
     number_of_sentences += 1
-
 def get_strings():
     global strings
     string = Template('w_i-2=$w_m2,t=$t')
@@ -61,8 +61,6 @@ def get_strings():
     string = Template('w_i+2=$w_2,t=$t')
     strings.append(copy.deepcopy(string))    
     string = Template('t_-2=$t_2,t_-1=$t_1,t=$t')
-    strings.append(copy.deepcopy(string))
-    string = Template('t_-1=$t_1,t=$t')
     strings.append(copy.deepcopy(string))
     string = Template('t=$t')
     strings.append(copy.deepcopy(string))
@@ -193,8 +191,8 @@ def get_indices(sent, tag, POS,  examp_num):
                 break
             if cca1.get(sentence[i+2], -2) == -2:
                 break
-            size = .1
-            for temp in range(10):
+            size = .0001
+            for temp in range(1):
                 size = size/10
                 cca_val = int(float(cca1[sentence[i+2]][k])/size)
                 phrase = 'cca:current,pos={0},size={1},bucket={2},t={3}'.format(k,size,cca_val,tags[i+2])
@@ -271,7 +269,7 @@ def perceptron():
     get_tags()
 #    get_codeWords()
     get_cca()
-    cca_length = 50
+    cca_length = 20
     for t in range(1,T_DEFAULT+1):
         print '---{0}---'.format(t)
         sys.stdout.flush()
@@ -287,6 +285,7 @@ def perceptron():
         time2 = 0.0
         avg_time = 0.0
         time_val = 0.0
+        start_time = time()
         first = True
         while vals:
 #------------------------
@@ -298,7 +297,7 @@ def perceptron():
                 avg_time = (avg_time*(count-1)+(time2-time1))/count
                 time_val = int((avg_time)*(number_of_sentences-count))
             first = False
-            progress = open('outputs_cca_pos_egw30_multibucket/progress3.txt', 'w')
+            progress = open('no_heuristic/progress.txt', 'w')
             progress.write('Percent complete:\n{0}/{1} = {2}%\n\nTime remaining: \n{3} h {4} min {5} sec'.format(int(count), int(number_of_sentences), float(count*100)/float(number_of_sentences), time_val/3600, (time_val%3600)/60, time_val%60))
             time1 = time2
             progress.close()
@@ -309,22 +308,25 @@ def perceptron():
             correct_tags = vals[1]
             POS = vals[2]
             tags = viterbi(sentence, POS, phi, possible_tags, alpha, strings, Words, regExp, codes, cca1, cca_length)
+            indices = get_indices(sentence, tags, POS, examp_num)
             if not tags == correct_tags:
                 j += 1
+                repeat[count] = [0,0]
                 dont_repeat = False
-                indices = get_indices(sentence, tags, POS, examp_num)
                 correct_indices = get_indices(sentence, correct_tags, POS, examp_num)
                 for i in indices:
                     alpha[i] += -1*add_factor
                 for i in correct_indices:
                     alpha[i] += add_factor
-                for i in set(indices) | set(correct_indices):
-                    val1 = alpha_average[i][0]+(examp_num - alpha_average[i][1])*alpha_average[i][2]
-                    val2 = examp_num
-                    val3 = alpha[i]
-                    alpha_average[i] = (val1,val2,val3)
+            for i in set(indices) | set(correct_indices):
+                val1 = alpha_average[i][0]+(examp_num - alpha_average[i][1])*alpha_average[i][2]
+                val2 = examp_num
+                val3 = alpha[i]
+                alpha_average[i] = (val1,val2,val3)
             vals = get_sentence_and_tags(data)
         data.close()
+        temp = time()-start_time
+        print 'Total Time: \n{0} h {1} min {2} sec'.format(temp/3600, (temp%3600)/60, temp%60)
         if dont_repeat:
             print 'SUCCESS!!!'
             break
@@ -339,12 +341,12 @@ def perceptron():
 
 def write_alpha(t):
     global alpha_average
-    string = 'outputs_cca_pos_egw30_multibucket/alpha_{0}.txt'.format(t)
+    string = 'no_heuristic/alpha_{0}.txt'.format(t)
     out = open(string, 'w')
     for i in alpha_average:
         out.write('{0} {1}\n'.format(i, alpha_average[i][0]))
     out.close()
-    string = 'outputs_cca_pos_egw30_multibucket/phi_{0}.txt'.format(t)
+    string = 'no_heuristic/phi_{0}.txt'.format(t)
     out = open(string, 'w')
     for i in phi:
         out.write('{0} {1}\n'.format(i, phi[i]))
